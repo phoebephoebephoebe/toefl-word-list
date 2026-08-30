@@ -3,21 +3,23 @@
 // 每次部署更新 CACHE_VERSION 讓手機拿到新版
 // ============================================================
 
-const CACHE_VERSION = 'v1.0.3';
+const CACHE_VERSION = 'v1.0.4';
 const CACHE_NAME = `toefl-app-${CACHE_VERSION}`;
 
+// 相對路徑：GitHub Pages 專案網站是子路徑（/toefl-word-list/），
+// 絕對路徑（開頭 /）會被解析成網域根目錄，導致快取到錯誤網址。
 const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/css/style.css',
-  '/js/data.js',
-  '/js/srs.js',
-  '/js/router.js',
-  '/js/ui.js',
-  '/icons/icon.svg',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
+  './',
+  './index.html',
+  './manifest.json',
+  './css/style.css',
+  './js/data.js',
+  './js/srs.js',
+  './js/router.js',
+  './js/ui.js',
+  './icons/icon.svg',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
 ];
 
 self.addEventListener('install', event => {
