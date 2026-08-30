@@ -3,7 +3,7 @@
 // 每次部署更新 CACHE_VERSION 讓手機拿到新版
 // ============================================================
 
-const CACHE_VERSION = 'v1.0.4';
+const CACHE_VERSION = 'v1.0.5';
 const CACHE_NAME = `toefl-app-${CACHE_VERSION}`;
 
 // 相對路徑：GitHub Pages 專案網站是子路徑（/toefl-word-list/），
