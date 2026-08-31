@@ -192,6 +192,10 @@ button { cursor: pointer; border: none; font-family: inherit; font-size: 15px;
 .stats-row-3 .stat-card { padding: 12px 6px; }
 .stats-row-3 .stat-value { font-size: 26px; }
 .stats-row-3 .stat-label { font-size: 11px; }
+.stats-row-4 { grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.stats-row-4 .stat-card { padding: 10px 4px; }
+.stats-row-4 .stat-value { font-size: 21px; }
+.stats-row-4 .stat-label { font-size: 10px; }
 .stat-card {
   background: var(--color-surface);
   border-radius: var(--radius);
@@ -267,6 +271,9 @@ button { cursor: pointer; border: none; font-family: inherit; font-size: 15px;
 .word-main { display: flex; align-items: baseline; gap: 8px; margin-bottom: 3px; flex-wrap: wrap; }
 .word-en { font-size: 17px; font-weight: 700; color: var(--color-text); }
 .word-pos { font-size: 12px; color: var(--color-primary); font-style: italic; }
+.word-status-badge { margin-left: auto; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
+.word-status-badge.status-mastered { background: var(--color-correct-bg); color: var(--color-correct); }
+.word-status-badge.status-struggling { background: var(--color-wrong-bg); color: var(--color-wrong); }
 .word-meaning { font-size: 13px; color: var(--color-text-2); }
 .word-example { font-size: 12px; color: var(--color-text-3); margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--color-border); line-height: 1.5; }
 .word-example .ex-en { color: var(--color-text-2); font-style: italic; }
@@ -396,6 +403,28 @@ button { cursor: pointer; border: none; font-family: inherit; font-size: 15px;
 .settings-action svg { width: 16px; height: 16px; flex-shrink: 0; }
 .settings-action:last-child { margin-bottom: 0; }
 .settings-version { text-align: center; font-size: 12px; color: var(--color-text-3); padding: 8px 0 24px; }
+
+/* ── 更新提示橫幅 ──────────────────────────────────────── */
+.update-banner {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--nav-h) + 12px);
+  width: calc(100% - 32px);
+  max-width: 448px;
+  background: var(--color-primary-dark);
+  color: #fff;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  box-shadow: var(--shadow-lg);
+  z-index: 200;
+  font-size: 14px;
+}
+.update-banner button { flex-shrink: 0; padding: 8px 14px; font-size: 13px; min-height: 36px; }
 
 /* ── 其他 ──────────────────────────────────────────────── */
 label.btn-secondary { display: flex; align-items: center; justify-content: center; cursor: pointer; }

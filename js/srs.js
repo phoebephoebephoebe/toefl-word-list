@@ -8,6 +8,7 @@
 const LS = {
   PROGRESS: 'toefl_progress',
   SETTINGS: 'toefl_settings',
+  SESSION: 'toefl_session',
 };
 
 function lsGet(key, fallback) {
@@ -74,6 +75,24 @@ function getWrongWords() {
     const p = data[w.id];
     return p && p.wrong > 0 && p.wrong >= p.correct;
   });
+}
+
+// 已熟悉：答對次數多於答錯次數（且至少答對過一次）
+function getMasteredWords() {
+  const data = getAllProgress();
+  return getPoolWords().filter(w => {
+    const p = data[w.id];
+    return p && p.correct > 0 && p.correct > p.wrong;
+  });
+}
+
+// 單一單字的學習狀態：'mastered' | 'struggling' | 'new'（未練習過）
+function getWordStatus(wordId) {
+  const p = getAllProgress()[wordId];
+  if (!p || (p.correct === 0 && p.wrong === 0)) return 'new';
+  if (p.wrong > 0 && p.wrong >= p.correct) return 'struggling';
+  if (p.correct > p.wrong) return 'mastered';
+  return 'new';
 }
 
 // scope: 'ALL' | 'WRONG' | <unitId>
@@ -166,4 +185,41 @@ function importProgress(jsonStr) {
 
 function resetProgress() {
   localStorage.removeItem(LS.PROGRESS);
+}
+
+// ── 練習 session 持久化（離開頁面／關閉瀏覽器後可恢復進度）────
+// 只存單字 id，不存整個物件，避免資料重複；還原時用 WORDS_MAP 查回。
+function saveSession(state) {
+  lsSet(LS.SESSION, {
+    mode: state.mode,
+    scope: state.scope,
+    queueIds: state.queue.map(w => w.id),
+    idx: state.idx,
+    sessionCorrect: state.sessionCorrect,
+    sessionWrong: state.sessionWrong,
+    wrongItemIds: state.wrongItems.map(w => w.id),
+    isRetryRound: state.isRetryRound,
+  });
+}
+
+function loadSession() {
+  const s = lsGet(LS.SESSION, null);
+  if (!s || !Array.isArray(s.queueIds)) return null;
+  const queue = s.queueIds.map(id => WORDS_MAP[id]).filter(Boolean);
+  if (queue.length === 0 || s.idx >= queue.length) return null;
+  const wrongItems = (s.wrongItemIds || []).map(id => WORDS_MAP[id]).filter(Boolean);
+  return {
+    mode: s.mode,
+    scope: s.scope,
+    queue,
+    idx: s.idx,
+    sessionCorrect: s.sessionCorrect || 0,
+    sessionWrong: s.sessionWrong || 0,
+    wrongItems,
+    isRetryRound: !!s.isRetryRound,
+  };
+}
+
+function clearSession() {
+  localStorage.removeItem(LS.SESSION);
 }

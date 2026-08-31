@@ -74,13 +74,5 @@
   <script src="js/router.js"></script>
   <script src="js/ui.js"></script>
 
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('service-worker.js')
-          .catch(err => console.warn('Service Worker registration failed:', err));
-      });
-    }
-  </script>
 </body>
 </html>

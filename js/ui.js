@@ -39,6 +39,7 @@ function buildHome() {
   const poolWords = getPoolWords();
   const progress = getAllProgress();
   const wrongCount = getWrongWords().length;
+  const masteredCount = getMasteredWords().length;
 
   const isNewUser = activeUnits.length === 0;
 
@@ -62,11 +63,15 @@ function buildHome() {
     wrap.appendChild(guide);
   }
 
-  const statsRow = div('stats-row stats-row-3');
+  const statsRow = div('stats-row stats-row-4');
   statsRow.innerHTML = `
     <div class="stat-card">
       <div class="stat-value">${poolWords.length}</div>
       <div class="stat-label">題庫中</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">${masteredCount}</div>
+      <div class="stat-label">已熟悉</div>
     </div>
     <div class="stat-card">
       <div class="stat-value">${wrongCount}</div>
@@ -235,7 +240,15 @@ function part_short_label(u) {
 }
 
 function buildWordListForUnit(unitId) {
-  const words = WORDS.filter(w => w.unit === unitId);
+  const progress = getAllProgress();
+  // 答錯優先：依「答錯次數－答對次數」由高到低排序，讓卡住的單字排在前面，
+  // 減少長章節捲動疲勞、也能一打開就先複習最需要加強的字。
+  const words = WORDS.filter(w => w.unit === unitId).slice().sort((a, b) => {
+    const pa = progress[a.id], pb = progress[b.id];
+    const scoreA = pa ? (pa.wrong - pa.correct) : 0;
+    const scoreB = pb ? (pb.wrong - pb.correct) : 0;
+    return scoreB - scoreA;
+  });
   const wrap = div('word-list-wrap');
   if (words.length === 0) {
     wrap.appendChild(div('empty-list-hint', '此清單尚未建置單字資料'));
@@ -243,11 +256,16 @@ function buildWordListForUnit(unitId) {
   }
   const list = div('word-list');
   words.forEach(w => {
+    const status = getWordStatus(w.id);
+    const badge = status === 'mastered' ? `<span class="word-status-badge status-mastered">已熟悉</span>`
+      : status === 'struggling' ? `<span class="word-status-badge status-struggling">待加強</span>`
+      : '';
     const card = div('word-card');
     card.innerHTML = `
       <div class="word-main">
         <span class="word-en">${w.word}</span>
         <span class="word-pos">${w.pos || ''}</span>
+        ${badge}
       </div>
       <div class="word-meaning">${w.meaning}</div>
       ${w.example ? `<div class="word-example"><span class="ex-en">${w.example}</span><span class="ex-cn">${w.exampleMeaning || ''}</span></div>` : ''}`;
@@ -276,13 +294,16 @@ let practiceState = {
 function buildPractice() {
   const wrap = div('page');
 
-  const initScope = pendingPracticeScope || practiceState.scope || 'ALL';
+  // 若有未完成的練習 session（例如切分頁或關閉瀏覽器前沒練完），優先恢復
+  const saved = loadSession();
+  const initScope = saved ? saved.scope : (pendingPracticeScope || practiceState.scope || 'ALL');
+  const initMode = saved ? saved.mode : (practiceState.mode || 'flashcard');
   pendingPracticeScope = null;
 
   const modeBar = div('mode-bar');
   modeBar.innerHTML = `
-    <button class="mode-btn${practiceState.mode === 'flashcard' ? ' active' : ''}" data-mode="flashcard">閃卡</button>
-    <button class="mode-btn${practiceState.mode === 'mc' ? ' active' : ''}" data-mode="mc">選擇題</button>`;
+    <button class="mode-btn${initMode === 'flashcard' ? ' active' : ''}" data-mode="flashcard">閃卡</button>
+    <button class="mode-btn${initMode === 'mc' ? ' active' : ''}" data-mode="mc">選擇題</button>`;
   wrap.appendChild(modeBar);
 
   const scopeWrap = div('scope-select-wrap');
@@ -306,9 +327,21 @@ function buildPractice() {
   const practiceArea = div('practice-area');
   wrap.appendChild(practiceArea);
 
-  practiceState.mode = practiceState.mode || 'flashcard';
+  practiceState.mode = initMode;
   practiceState.scope = initScope;
-  _startPracticeSession(practiceArea);
+
+  if (saved) {
+    practiceState.queue = saved.queue;
+    practiceState.idx = saved.idx;
+    practiceState.sessionCorrect = saved.sessionCorrect;
+    practiceState.sessionWrong = saved.sessionWrong;
+    practiceState.wrongItems = saved.wrongItems;
+    practiceState.isRetryRound = saved.isRetryRound;
+    practiceState.flipped = false;
+    _renderCurrentCard(practiceArea);
+  } else {
+    _startPracticeSession(practiceArea);
+  }
 
   modeBar.querySelectorAll('.mode-btn').forEach(b => {
     b.addEventListener('click', () => {
@@ -330,6 +363,7 @@ function buildPractice() {
 function _startPracticeSession(container) {
   const activeUnits = getActiveUnits();
   if (activeUnits.length === 0) {
+    clearSession();
     container.innerHTML = `
       <div class="empty-state">
         <div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
@@ -341,6 +375,7 @@ function _startPracticeSession(container) {
 
   const queue = getStudyQueue(practiceState.scope);
   if (queue.length === 0) {
+    clearSession();
     container.innerHTML = `
       <div class="empty-state">
         <div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
@@ -365,9 +400,10 @@ function _renderCurrentCard(container) {
   const { mode, queue, idx, wrongItems } = practiceState;
   if (idx >= queue.length) {
     if (wrongItems.length > 0) _startRetryRound(container);
-    else _renderSessionEnd(container);
+    else { clearSession(); _renderSessionEnd(container); }
     return;
   }
+  saveSession(practiceState);
   if (mode === 'flashcard') _renderFlashcard(container, queue[idx]);
   else _renderMC(container, queue[idx]);
 }
@@ -559,6 +595,14 @@ function buildSettings() {
       <input type="file" id="import-file" accept=".json" style="display:none">
     </div>
 
+    <div class="settings-section">
+      <div class="settings-title">應用程式</div>
+      <button class="btn-secondary settings-action" id="btn-force-update">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        清除快取並更新
+      </button>
+    </div>
+
     <div class="settings-section settings-danger">
       <div class="settings-title">危險操作</div>
       <button class="btn-danger settings-action" id="btn-reset">
@@ -568,6 +612,12 @@ function buildSettings() {
     </div>
 
     <div class="settings-version">TOEFL 單字學習計畫 v1.0.0</div>`;
+
+  wrap.querySelector('#btn-force-update').addEventListener('click', () => {
+    if (confirm('會清除本機快取的頁面檔案並重新整理（不影響您的學習進度資料）。確定要更新嗎？')) {
+      forceClearAndUpdate();
+    }
+  });
 
   wrap.querySelector('#btn-export').addEventListener('click', () => {
     const json = exportProgress();
@@ -607,7 +657,69 @@ function buildSettings() {
   return wrap;
 }
 
+// ============================================================
+// 6. Service Worker 更新機制
+// 新版裝好後不會自動生效，畫面下方會跳出提示橫幅，使用者按「立即更新」
+// 才會切換到新版並重新整理，避免練習到一半畫面被無預警換掉。
+// ============================================================
+function initServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js').then(reg => {
+      // 頁面載入時順便主動檢查一次是否有新版
+      reg.update().catch(() => {});
+
+      if (reg.waiting) showUpdateBanner(reg.waiting);
+
+      reg.addEventListener('updatefound', () => {
+        const newWorker = reg.installing;
+        if (!newWorker) return;
+        newWorker.addEventListener('statechange', () => {
+          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            showUpdateBanner(newWorker);
+          }
+        });
+      });
+    }).catch(err => console.warn('Service Worker registration failed:', err));
+  });
+
+  let _reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (_reloading) return;
+    _reloading = true;
+    window.location.reload();
+  });
+}
+
+function showUpdateBanner(worker) {
+  if (document.getElementById('update-banner')) return;
+  const banner = div('update-banner');
+  banner.id = 'update-banner';
+  banner.innerHTML = `
+    <span>有新版本可用</span>
+    <button class="btn-primary" id="update-banner-btn">立即更新</button>`;
+  document.body.appendChild(banner);
+  banner.querySelector('#update-banner-btn').addEventListener('click', () => {
+    worker.postMessage('SKIP_WAITING');
+    banner.remove();
+  });
+}
+
+async function forceClearAndUpdate() {
+  if ('serviceWorker' in navigator) {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(regs.map(r => r.unregister()));
+  }
+  if (window.caches) {
+    const keys = await caches.keys();
+    await Promise.all(keys.map(k => caches.delete(k)));
+  }
+  window.location.reload();
+}
+
 // ── App 初始化 ────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
   initRouter();
+  initServiceWorker();
 });

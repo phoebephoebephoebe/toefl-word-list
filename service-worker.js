@@ -3,7 +3,7 @@
 // 每次部署更新 CACHE_VERSION 讓手機拿到新版
 // ============================================================
 
-const CACHE_VERSION = 'v1.0.5';
+const CACHE_VERSION = 'v1.1.0';
 const CACHE_NAME = `toefl-app-${CACHE_VERSION}`;
 
 // 相對路徑：GitHub Pages 專案網站是子路徑（/toefl-word-list/），
@@ -28,7 +28,10 @@ self.addEventListener('install', event => {
       return Promise.allSettled(
         STATIC_ASSETS.map(url => cache.add(url).catch(() => {}))
       );
-    }).then(() => self.skipWaiting())
+    })
+    // 注意：這裡刻意不自動呼叫 self.skipWaiting()。新版裝好後會停在
+    // waiting 狀態，等使用者在畫面上點「立即更新」才會接手，避免使用
+    // 者練習到一半畫面無預警被換掉。
   );
 });
 
@@ -40,6 +43,10 @@ self.addEventListener('activate', event => {
       )
     ).then(() => self.clients.claim())
   );
+});
+
+self.addEventListener('message', event => {
+  if (event.data === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('fetch', event => {
