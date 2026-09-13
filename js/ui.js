@@ -95,15 +95,27 @@ function buildHome() {
   const progressSection = div('progress-section');
   const progressTitle = div('progress-title', '題庫設定進度');
   progressSection.appendChild(progressTitle);
-  UNITS.forEach(u => {
-    const total = getPoolCountForUnit(u.id);
+  // 依章節（UNITS_BASE，18 筆）彙總顯示，即使章節底下因字數 >100
+  // 被切成多個子清單，這裡仍是一個章節一列，避免變成落落長的清單。
+  UNITS_BASE.forEach(base => {
+    const subUnits = getUnitsForChapter(base.part, base.chapter);
+    const total = subUnits.reduce((sum, su) => sum + getPoolCountForUnit(su.id), 0);
     if (total === 0) return; // 尚未建置資料的清單先不顯示
-    const active = activeUnits.includes(u.id);
     const item = div('progress-item');
-    item.innerHTML = `
-      <span class="progress-label">${u.label}</span>
-      <div class="progress-bar-wrap"><div class="progress-bar" style="width:${active ? 100 : 0}%"></div></div>
-      <span class="progress-count">${active ? total : 0}/${total}</span>`;
+    if (subUnits.length === 1) {
+      const active = activeUnits.includes(subUnits[0].id);
+      item.innerHTML = `
+        <span class="progress-label">${base.label}</span>
+        <div class="progress-bar-wrap"><div class="progress-bar" style="width:${active ? 100 : 0}%"></div></div>
+        <span class="progress-count">${active ? total : 0}/${total}</span>`;
+    } else {
+      const activeParts = subUnits.filter(su => activeUnits.includes(su.id)).length;
+      const pct = Math.round((activeParts / subUnits.length) * 100);
+      item.innerHTML = `
+        <span class="progress-label">${base.label}</span>
+        <div class="progress-bar-wrap"><div class="progress-bar" style="width:${pct}%"></div></div>
+        <span class="progress-count">${activeParts}/${subUnits.length} 份</span>`;
+    }
     progressSection.appendChild(item);
   });
   wrap.appendChild(progressSection);
@@ -157,9 +169,9 @@ function buildPartContent(part) {
     : part === 'listening' ? LISTENING_CHAPTER_LABELS : null;
 
   if (!chapterLabels) {
-    // 補充單字本：無章節，直接顯示單一清單
-    const unitId = part;
-    wrap.appendChild(buildWordListForUnit(unitId));
+    // 補充單字本：無章節，合併底下所有子清單（若字數超過100已被切分）
+    const unitIds = getUnitsForChapter(part, null).map(u => u.id);
+    wrap.appendChild(buildWordListForUnit(unitIds));
     return wrap;
   }
 
@@ -177,7 +189,10 @@ function buildPartContent(part) {
   function showChapter(ch) {
     chapterBar.querySelectorAll('.chapter-btn').forEach(b => b.classList.toggle('active', b.dataset.ch === ch));
     listWrap.innerHTML = '';
-    listWrap.appendChild(buildWordListForUnit(`${part}__${ch}`));
+    // 該章節可能被切成多個子清單（字數 >100），合併顯示成單一列表，
+    // 維持學習頁「一個章節一次看全部」的體驗。
+    const unitIds = getUnitsForChapter(part, ch).map(u => u.id);
+    listWrap.appendChild(buildWordListForUnit(unitIds));
   }
   chapterBar.querySelectorAll('.chapter-btn').forEach(b => {
     b.addEventListener('click', () => showChapter(b.dataset.ch));
@@ -185,6 +200,12 @@ function buildPartContent(part) {
 
   showChapter(chapters[0]);
   return wrap;
+}
+
+// 章節（或無章節的補充單字本）底下實際的練習池子清單。字數 ≤100 的
+// 章節只會有一筆（跟原本一樣），超過 100 字的章節會回傳多筆子清單。
+function getUnitsForChapter(part, chapterKey) {
+  return UNITS.filter(u => u.part === part && u.chapter === chapterKey);
 }
 
 function buildPoolBar(units) {
@@ -221,8 +242,8 @@ function buildPool() {
     const chapterLabels = part === 'reading' ? READING_CHAPTER_LABELS
       : part === 'listening' ? LISTENING_CHAPTER_LABELS : null;
     const units = chapterLabels
-      ? Object.keys(chapterLabels).map(ch => UNITS_MAP[`${part}__${ch}`])
-      : [UNITS_MAP[part]];
+      ? Object.keys(chapterLabels).flatMap(ch => getUnitsForChapter(part, ch))
+      : getUnitsForChapter(part, null);
 
     const section = div('settings-section');
     section.appendChild(el('div', 'settings-title', PART_LABELS[part]));
@@ -239,11 +260,12 @@ function part_short_label(u) {
   return idx >= 0 ? u.label.slice(idx + 1) : u.label;
 }
 
-function buildWordListForUnit(unitId) {
+function buildWordListForUnit(unitIds) {
+  const ids = Array.isArray(unitIds) ? unitIds : [unitIds];
   const progress = getAllProgress();
   // 答錯優先：依「答錯次數－答對次數」由高到低排序，讓卡住的單字排在前面，
   // 減少長章節捲動疲勞、也能一打開就先複習最需要加強的字。
-  const words = WORDS.filter(w => w.unit === unitId).slice().sort((a, b) => {
+  const words = WORDS.filter(w => ids.includes(w.unit)).slice().sort((a, b) => {
     const pa = progress[a.id], pb = progress[b.id];
     const scoreA = pa ? (pa.wrong - pa.correct) : 0;
     const scoreB = pb ? (pb.wrong - pb.correct) : 0;

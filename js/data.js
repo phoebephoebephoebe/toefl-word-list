@@ -35,9 +35,11 @@ const LISTENING_CHAPTER_LABELS = {
 };
 
 // ============================================================
-// UNITS — 學習頁章節標籤 / 練習池單位（共 18 個清單）
+// UNITS_BASE — 學習頁章節標籤 / 首頁進度彙總單位（共 18 個章節）
+// 實際練習池單位（UNITS，見檔案末尾）會依字數把超過 100 字的
+// 章節再切成 ≤100 字的子清單，但學習頁瀏覽固定用這 18 個章節。
 // ============================================================
-const UNITS = [
+const UNITS_BASE = [
   ...Object.keys(READING_CHAPTER_LABELS).map(ch => ({
     id: `reading__${ch}`, part: "reading", chapter: ch,
     label: `閱讀｜${READING_CHAPTER_LABELS[ch]}`,
@@ -49,7 +51,6 @@ const UNITS = [
   { id: "reading_extra", part: "reading_extra", chapter: null, label: "閱讀｜補充單字" },
   { id: "listening_extra", part: "listening_extra", chapter: null, label: "聽力｜補充單字" },
 ];
-const UNITS_MAP = Object.fromEntries(UNITS.map(u => [u.id, u]));
 
 // ============================================================
 // 第一部分：閱讀單字本 — 考古學 Archaeology
@@ -3127,3 +3128,44 @@ const WORDS = [
   ...W_L_EXTRA,
 ];
 const WORDS_MAP = Object.fromEntries(WORDS.map(w => [w.id, w]));
+
+// ============================================================
+// UNITS — 練習池實際單位。把 UNITS_BASE 裡超過 100 字的章節依
+// 原始順序平均切成 ≤100 字的子清單（子清單 id：`${baseId}__${n}`，
+// label：`${baseLabel} N/總份數`），改寫對應單字的 unit 欄位。
+// 這一步只影響「題庫」頁勾選、「練習」頁範圍下拉；「學習」頁瀏覽
+// 仍以 UNITS_BASE（章節層級）為準。
+// ============================================================
+function _chunkUnits(baseUnits, words) {
+  const wordsByUnit = {};
+  words.forEach(w => {
+    (wordsByUnit[w.unit] = wordsByUnit[w.unit] || []).push(w);
+  });
+
+  const units = [];
+  baseUnits.forEach(base => {
+    const list = wordsByUnit[base.id] || [];
+    if (list.length <= 100) {
+      units.push(base);
+      return;
+    }
+    const n = Math.ceil(list.length / 100);
+    const size = Math.floor(list.length / n);
+    const rem = list.length % n;
+    let offset = 0;
+    for (let i = 0; i < n; i++) {
+      const count = size + (i < rem ? 1 : 0);
+      const chunkId = `${base.id}__${i + 1}`;
+      list.slice(offset, offset + count).forEach(w => { w.unit = chunkId; });
+      units.push({
+        id: chunkId, part: base.part, chapter: base.chapter,
+        label: `${base.label} ${i + 1}/${n}`,
+      });
+      offset += count;
+    }
+  });
+  return units;
+}
+
+const UNITS = _chunkUnits(UNITS_BASE, WORDS);
+const UNITS_MAP = Object.fromEntries(UNITS.map(u => [u.id, u]));
